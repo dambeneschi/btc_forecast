@@ -7,25 +7,37 @@ plt.rcParams["figure.figsize"] = (20,12)
 
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 
-from tensorflow.keras.layers import LSTM, Softmax, Dense
-from tensorflow.keras.losses import BinaryCrossentropy
-from tensorflow.keras.optimizers import RMSprop
-from tensorflow.keras import Sequential
-from tensorflow.keras.callbacks import ReduceLROnPlateau
-from tensorflow.keras.models import load_model
+#TF 1.5 with Keras 2.2.5 for CUDA 9.0
+from keras.layers import LSTM, Dense, TimeDistributed, SpatialDropout1D
+from keras.optimizers import RMSprop
+from keras import Sequential
+from keras.callbacks import ReduceLROnPlateau
+from keras.models import load_model
 
 
 class LSTM_Model:
-    def __init__(self, X_train, y_train, X_test, y_test, lr, n_epochs, activation, dr):
+    '''
+    Builds an LSTM unidirectional model
+    one LSTM layer of 300 units, one SpatialDropout
+    and Dense with Softmax for propability like output for binary classification
+    with RMSProp optimizer,
+    and trains it across n_epochs
+    '''
+
+    def __init__(self, X_train, y_train, X_test, y_test, lr, n_epochs, activation, batch_size, dr, class_weights):
         self.lr = lr
         self.n_epochs = n_epochs
         self.activation = activation
+        self.batch_size = batch_size
         self.dr = dr
 
+        self.class_weights = class_weights
         self.X_train = X_train
         self.y_train = y_train
         self.X_test = X_test
         self.y_test = y_test
+
+        self.trained_path = os.path.join(os.getcwd(), 'Trained/')
 
 
 
@@ -35,27 +47,20 @@ class LSTM_Model:
         lstm = Sequential()
 
 
-        lstm.add(LSTM(200, activation=activation, stateful=True,
-                      batch_input_shape=(batch_size, X_train.shape[1], X_train.shape[2]),
-                      return_sequences=True, dropout=dr, recurrent_dropout=dr))
+        lstm.add(LSTM(300, activation=self.activation, stateful=True,
+                      batch_input_shape=(self.batch_size, self.X_train.shape[1], self.X_train.shape[2]),
+                      return_sequences=True, dropout=0, recurrent_dropout=0))
 
-        lstm.add(LSTM(200, activation=activation, stateful=True,
-                      batch_input_shape=(batch_size, X_train.shape[1], X_train.shape[2]),
-                      return_sequences=True, dropout=dr, recurrent_dropout=dr))
-
-        lstm.add(LSTM(100, activation=activation, stateful=True,
-                      batch_input_shape=(batch_size, X_train.shape[1], X_train.shape[2]),
-                      return_sequences=True, dropout=dr, recurrent_dropout=dr))
-
-        lstm.add(LSTM(40, activation=activation, stateful=True,
-                      batch_input_shape=(batch_size, X_train.shape[1], X_train.shape[2]),
-                      return_sequences=False, dropout=dr, recurrent_dropout=dr))
+        # Dropout for overfitting - constant mask
+        lstm.add(SpatialDropout1D(self.dr))
 
         # Output layer
-        lstm.add(Dense(units=1, activation='sigmoid'))
-
+        lstm.add(TimeDistributed(Dense(units=1, activation='sigmoid')))
 
         print(lstm.summary())
+        self.lstm = lstm
+
+
 
     def train(self):
 
@@ -64,9 +69,8 @@ class LSTM_Model:
                                        mode="auto", min_delta=0.0001, min_lr=1e-9)]
 
         # Compiling Optimizer
-        rmsprop = RMSprop(lr=lr, rho=0.9, epsilon=None, decay=0.0)
-        lstm.compile(loss=BinaryCrossentropy(), optimizer=rmsprop,
-                     metrics=['accuracy'])
+        rmsprop = RMSprop(lr=self.lr, rho=0.9, epsilon=None, decay=0.0)
+        self.lstm.compile(loss='binary_crossentropy', optimizer=rmsprop, metrics=['accuracy'])
 
         # loss arrays
         train_loss_list = []
@@ -77,23 +81,23 @@ class LSTM_Model:
 
         counter = 1
 
-        for n in range(n_epochs):
-            print('** epoch {}/{} **'.format(counter, n_epochs))
+        for n in range(self.n_epochs):
+            print('** epoch {}/{} **'.format(counter, self.n_epochs))
 
-            history = lstm.fit(x=X_train, y=y_train, epochs=1, validation_data=(X_test, y_test),
-                               batch_size=batch_size, shuffle=False, callbacks=callbacks,
-                               class_weight=class_weights,
-                               use_multiprocessing=True)
+            history = self.lstm.fit(x=self.X_train, y=self.y_train, epochs=1,
+                                    validation_data=(self.X_test, self.y_test),
+                                    batch_size=self.batch_size, class_weight=self.class_weights,
+                                    shuffle=False, callbacks=callbacks, use_multiprocessing=True)
 
             # Append the list to follow the evolution of loss on train and test sets
             train_loss_list.append(history.history['loss'][0])
-            train_acc_list.append(history.history['accuracy'][0])
+            train_acc_list.append(history.history['acc'][0])
 
             test_loss_list.append(history.history['val_loss'][0])
-            test_acc_list.append(history.history['val_accuracy'][0])
+            test_acc_list.append(history.history['val_acc'][0])
 
             # Reset the cell states (required for stateful)
-            lstm.reset_states()
+            self.lstm.reset_states()
 
             counter += 1
 
@@ -114,3 +118,6 @@ class LSTM_Model:
             plt.show()
 
 
+
+    def save_trained(self):
+        self.lstm.save_model(os.path.join(self.trained_path, 'BTC_{}ep.h5'.format(self.n_epochs)))

@@ -1,8 +1,8 @@
 import pickle
 
-from BTC_repository.Pycode.Data_Aquisition import get_crypto_data
-from BTC_repository.Pycode.Features_Engineering import *
-from BTC_repository.Pycode.Model import LSTM_Model
+from .Data_Aquisition import get_crypto_data
+from .Features_Engineering import *
+from .Model import LSTM_Model
 
 
 
@@ -23,13 +23,17 @@ class Training_Pipeline():
 
         :param n_batch_obs: number of observations batches (1 batch = 2000 obs) retrieved from the CryptoAPI
         :param currency: currency fo the BTC price (USD, EUR)
-        :param exchange: Echange platform to get the prices for (Coinbase, Brittrex)
-        :param n_best: K Best feaures to keep for the classification problem
+        :param exchange: Exchange platform to get the prices for (Coinbase, Brittrex)
+        :param n_best: K Best features to keep for the classification problem
         :param look_back: number of lags to use for the LSTM (3rd dimension input array)
         :param batch_size: batch_size argument for the neural network
         :param test_batches: number of batches for testing (n * batch_size)
         :param val_batches: number of batches for validation (n * batch_size)
         '''
+        print('* RUNNING THE DATA PIPELINE')
+
+        # Useful for the model training
+        self.batch_size = batch_size
 
         # Get data from API
         df = get_crypto_data(n_batch_obs=n_batch_obs,  currency=currency, exchange=exchange)
@@ -72,8 +76,10 @@ class Training_Pipeline():
         Train the LSTM across epochs and save the instance as .h5
         :return:
         '''
-
-        lstm = LSTM_Model()
+        print('* TRAINING THE LSTM MODEL')
+        lstm = LSTM_Model(self.X_train, self.y_train, self.X_test, self.y_test,
+                          lr=1e-5, n_epochs=2000, activation='tanh',
+                          batc_size=self.batch_size, dr=0.1, class_weights=self.class_weights)
 
 
 
