@@ -45,10 +45,6 @@ def features_engineering(df):
         # Labels for the time derivatives
         movs_labels += [col + '_mov{}H'.format(i) for col in df.columns]
 
-    # for i in periods:
-    # Labels for pct change
-    # movs_labels += [col + '_return{}H'.format(i) for col in df.columns]
-
     # Concatenate
     feats_df = pd.concat([df.loc[:, orig_cols]] + movs_list, axis=1)
     feats_df.columns = orig_cols + movs_labels
@@ -62,22 +58,11 @@ def features_engineering(df):
         series = feats_df.loc[:, col]
 
         for i in periods[1:]:
-            # Moving Averages series & combinations
-            feats_df[col + '.MA{}H'.format(i)] = series.rolling("{}H".format(i)).mean()
-            feats_df[col + '.MA{}H.diff'.format(i)] = series.rolling("{}H".format(i)).mean().diff()
+            for l, stat in zip(['Average', 'Min', 'Max', 'Std', 'Sum'], [np.mean, np.min, np.max, np.std, np.sum]):
 
-            # Moving stats
-            feats_df[col + '.MStd{}H'.format(i)] = series.rolling("{}H".format(i)).std()
-            feats_df[col + '.MStd{}H.diff'.format(i)] = series.rolling("{}H".format(i)).std().diff()
-
-            feats_df[col + '.MMin{}H'.format(i)] = series.rolling("{}H".format(i)).min()
-            feats_df[col + '.MMin{}H.diff'.format(i)] = series.rolling("{}H".format(i)).min().diff()
-
-            feats_df[col + '.MMax{}H'.format(i)] = series.rolling("{}H".format(i)).max()
-            feats_df[col + '.MMax{}H.diff'.format(i)] = series.rolling("{}H".format(i)).max().diff()
-
-            feats_df[col + '.MSum{}H'.format(i)] = series.rolling("{}H".format(i)).sum()
-            feats_df[col + '.MSum{}H.diff'.format(i)] = series.rolling("{}H".format(i)).sum().diff()
+                # Apply rolling statistic and get its movement
+                feats_df[col + '.M{}{}H'.format(l, i)] = series.rolling("{}H".format(i)).apply(stat)
+                feats_df[col + '.M{}{}H.diff'.format(l, i)] = series.rolling("{}H".format(i)).apply(stat).diff()
 
             # T-Score on rolling 1 month & 6 months sample (tscore is zscore on a sample, not on whole distribution)
             feats_df[col + '.TScore6M'] = rolling_tscores(series=series, window='4400H')
@@ -85,11 +70,26 @@ def features_engineering(df):
 
     print(feats_df.info())
 
-    # suqared features
+    # squared features
     for col in feats_df.columns:
         feats_df[col + '.Squared'] = feats_df[col] * feats_df[col]
 
     feats_df.info()
+
+
+    # Time Wise Features
+    # Add the day of week and month of year features
+    time_feats = []
+    time_feats.append(pd.DataFrame(pd.get_dummies(feats_df.index.dayofweek).values,
+                                   columns=['Day_of_Week_{}'.format(i) for i in range(1, 6)],
+                                   index=feats_df.index))
+
+    time_feats.append(pd.DataFrame(pd.get_dummies(feats_df.index.hour).values,
+                                   columns=['Hour_{}'.format(i) for i in range(1, 25)],
+                                   index=feats_df.index))
+
+    feats_df = pd.concat([feats_df] + time_feats, axis=1)
+
 
     #TODO: Add difference from min/max,
 
