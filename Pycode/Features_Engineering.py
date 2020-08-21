@@ -82,7 +82,7 @@ def features_engineering(df):
     # Add the day of week and month of year features
     time_feats = []
     time_feats.append(pd.DataFrame(pd.get_dummies(feats_df.index.dayofweek).values,
-                                   columns=['Day_of_Week_{}'.format(i) for i in range(1, 6)],
+                                   columns=['Day_of_Week_{}'.format(i) for i in range(1, 8)],
                                    index=feats_df.index))
 
     time_feats.append(pd.DataFrame(pd.get_dummies(feats_df.index.hour).values,
