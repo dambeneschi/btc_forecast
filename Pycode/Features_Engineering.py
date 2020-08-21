@@ -91,15 +91,53 @@ def features_engineering(df):
     feats_df = pd.concat([feats_df] + time_feats, axis=1)
 
 
+
+    ## TA INDICATORS
+    # Prepare dataset for Technical Analysis Indicators
+    ohcl_cols = ['close', 'open', 'high', 'low', 'volumefrom']
+    df_ta = df.loc[:, ohcl_cols].dropna()
+    df_ta.columns = df_ta.columns[:-1].tolist() + ['volume']
+    df_ta.index.name = 'datetime'
+
+    # Compute the Indicators
+    df_ta.ta.strategy(name='all')
+
+    # Drop the ooriginal OHCL columns
+    df_ta.drop(columns=df_ta.columns[:6], inplace=True)
+    df_ta.columns = ['BTC Price.' + col for col in df_ta.columns]
+
+    # Drop totally empty columns & tthose with high number of missing values
+    df_ta.dropna(how='all', axis='columns', inplace=True)
+
+    print(df_ta.isnull().sum().sort_values(ascending=False).iloc[:20])
+    df_ta.drop(columns=df_ta.isnull().sum().sort_values(ascending=False).index[:6], inplace=True)
+
+    # Get the movements of the indicators
+    df_ta_diff = df_ta.select_dtypes('number').diff()
+    df_ta_diff.columns = [col + '.Mov' for col in df_ta_diff.columns]
+
+    df_ta.info()
+
+
     #TODO: Add difference from min/max,
 
-    # Check for Inf or Nan values
-    feats_df.dropna(inplace=True)
-    print(feats_df.info())
-    print('{} NaNs in the features'.format(feats_df.isnull().sum().sum()))
-    print('{} inf values in the features'.format(feats_df.isin([np.inf, -np.inf]).sum().sum()))
+    # Put all together
+    df_all_feats = pd.concat([feats_df, df_ta, df_ta_diff], axis=1)
+    print(df_all_feats.isnull().sum().sum())
 
-    return feats_df
+    df_all_feats.dropna(how='all', axis='columns', inplace=True)
+    print(df_all_feats.isnull().sum().sum())
+    print(df_all_feats.isnull().sum().sort_values(ascending=False).iloc[:20])
+
+    df_all_feats.dropna(inplace=True)
+    print(df_all_feats.isnull().sum().sum())
+
+    df_all_feats.info()
+
+    print('{} NaNs in the features'.format(df_all_feats.isnull().sum().sum()))
+    print('{} inf values in the features'.format(df_all_feats.isin([np.inf, -np.inf]).sum().sum()))
+
+    return df_all_feats
 
 
 
