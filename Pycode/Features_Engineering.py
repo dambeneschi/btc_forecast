@@ -31,7 +31,8 @@ def rolling_tscores(series, window):
     return tscores
 
 
-def features_engineering(df):
+
+def features_engineering(df, _lags=False):
 
     # original columns to keep
     orig_cols = df.columns.tolist()[-2:]
@@ -120,6 +121,7 @@ def features_engineering(df):
     df_ta.info()
 
 
+
     #TODO: Add difference from min/max,
 
     # Put all together
@@ -135,8 +137,21 @@ def features_engineering(df):
 
     df_all_feats.info()
 
+
+
+    # LAGGED VALUES
+    if _lags:
+        # Add lagged values
+        for col in df_all_feats.columns:
+            for l in range(1, 7):
+                df_all_feats[col + '.lag{}'.format(l)] = df_all_feats[col].shift(l)
+
+    df_all_feats.dropna(inplace=True)
+
     print('{} NaNs in the features'.format(df_all_feats.isnull().sum().sum()))
     print('{} inf values in the features'.format(df_all_feats.isin([np.inf, -np.inf]).sum().sum()))
+
+    
 
     return df_all_feats
 
