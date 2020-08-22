@@ -222,13 +222,13 @@ def XGB_Eval_Pipeline(params, df_train_kbest, df_val_kbest, target_train, target
 
 
     # Format test values as dataframe
-    df_test = pd.DataFrame({'Real Label': y_test * 100,
+    df_test = pd.DataFrame({'Real Label': y_test,
                             'Predicted DLabel': xgb_reg.predict(dm_test) * 100},
                            index=target_train.iloc[-n_test:].index).round(0)
 
     # Format the forecasts for Trading Backtesting
-    df_backtest = pd.DataFrame({'Real Label': y_val * 100,
-                                'Predicted Label': y_preds * 100}, index=target_val.index).round(0)
+    df_backtest = pd.DataFrame({'Real Label': y_val,
+                                'Predicted Label': y_preds}, index=target_val.index).round(0)
 
 
     return df_test, df_backtest
