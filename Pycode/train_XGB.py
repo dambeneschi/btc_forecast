@@ -1,6 +1,7 @@
 import os
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
 from sklearn.preprocessing import RobustScaler
 from sklearn.metrics import roc_auc_score
 import xgboost as xgb
@@ -229,6 +230,25 @@ def XGB_Eval_Pipeline(params, df_train_kbest, df_val_kbest, target_train, target
     # Format the forecasts for Trading Backtesting
     df_backtest = pd.DataFrame({'Real Label': y_val,
                                 'Predicted Label': y_preds}, index=target_val.index).round(0)
+
+
+
+    # Features Importance
+    ftype_list = ['weight', 'total_gain']
+
+    plt.rcParams['figure.figsize'] = (16, 6 * len(ftype_list))
+    fig, ax = plt.subplots(nrows=len(ftype_list))
+
+    for i, ftype in enumerate(ftype_list):
+        # Sorted importance
+        drivers_weight = pd.Series(xgb_reg.get_score(fmap='', importance_type=ftype)).sort_values(ascending=False)
+
+        # Subplot
+        _ = drivers_weight.iloc[:20].plot(kind='bar', color='b', ax=ax[i],
+                                          title='Features Importance - {} criteria'.format(ftype))
+
+    _ = plt.tight_layout()
+    plt.show()
 
 
     return df_test, df_backtest
