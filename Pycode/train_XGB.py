@@ -102,7 +102,7 @@ def XGB_Tuning_Pipeline(df_train_kbest, df_val_kbest, target_train, target_val, 
 
         # Fit model
         n_rounds = 1400
-        xgb_reg = xgb.train(params={'objective': "binary:hinge", 'booster': 'gbtree',
+        xgb_reg = xgb.train(params={'objective': "binary:logistic", 'booster': 'gbtree',
                                     'tree_method': 'hist', 'grow_policy': 'lossguide',
 
                                     'silent': True, 'n_jobs': os.cpu_count(), 'random_state': 123,
@@ -127,7 +127,6 @@ def XGB_Tuning_Pipeline(df_train_kbest, df_val_kbest, target_train, target_val, 
         y_probas = xgb_reg.predict(dm_val)
         y_preds = 1 * (y_probas > 0.5)
 
-        print(y_val, y_probas)
         auc = roc_auc_score(y_val, y_probas)
         acc = np.mean(y_preds == y_val)
 
