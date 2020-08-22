@@ -29,8 +29,8 @@ def XGB_Data_Preparation(kbest_df, target, n_val=60):
     print(kbest_df.shape, df_train.shape, df_val.shape)
 
     # Split target
-    target_train = target.iloc[:-n_val] / 100
-    target_val = target.iloc[-n_val:] / 100
+    target_train = target.iloc[:-n_val]
+    target_val = target.iloc[-n_val:]
 
     # Scale
     X_scaler = RobustScaler()
@@ -47,32 +47,6 @@ def XGB_Data_Preparation(kbest_df, target, n_val=60):
 
 
 
-
-def xgb_ng_loss(yp, dmt):
-    '''
-    Custom loss function to be passed as feval argument in XGB train instance
-    PENALIZED RMSE || TO BE MINIMIZED ON TRAIN SET
-
-    - penalty factor is proportional to the number of wrong prediction
-    - yp (predictions) is type np.array
-    - dmt (real values) is type xgb.DMatrix -> yt should be extracted as array
-
-    Checks that the resuls are:
-           - in the right range (+/- threshold)  with a penalty factor to make this part more important
-           - in the same direction
-
-    At each boosting round, the loss is computed on the TRAIN set.
-    yp & yt arrays have shapes (n_obs_train, )
-
-    '''
-
-    # Extract the y array from the true values DMatrix
-    yt = dmt.get_label()
-
-    penalty = 10 * np.sum((yt * yp) < 0)
-
-    # return penalized RMSE
-    return 'ng_loss', penalty * (np.mean((yt - yp) ** 2) ** 0.5)
 
 
 def XGB_Tuning_Pipeline(df_train_kbest, df_val_kbest, target_train, target_val, n_test=200, n_tune=200):
@@ -128,7 +102,7 @@ def XGB_Tuning_Pipeline(df_train_kbest, df_val_kbest, target_train, target_val, 
 
         # Fit model
         n_rounds = 1400
-        xgb_reg = xgb.train(params={'objective': "binary:hinge", 'booster': 'gbtree', 'disable_default_eval_metric': 1,
+        xgb_reg = xgb.train(params={'objective': "binary:hinge", 'booster': 'gbtree',
                                     'tree_method': 'hist', 'grow_policy': 'lossguide',
 
                                     'silent': True, 'n_jobs': os.cpu_count(), 'random_state': 123,
@@ -145,14 +119,16 @@ def XGB_Tuning_Pipeline(df_train_kbest, df_val_kbest, target_train, target_val, 
                             dtrain=dm_train, num_boost_round=n_rounds,
                             callbacks=[xgb.callback.early_stop(stopping_rounds=200, maximize=False, verbose=True)],
 
-                            # Custom scoring
-                            feval=xgb_ng_loss, evals=[(dm_train, 'train'), (dm_test, 'test')],
+                            # Training scoring
+                            evals=[(dm_train, 'train'), (dm_test, 'test')],
                             verbose_eval=0, evals_result=xgb_evals)
 
         # Score on Validation Set
-        y_preds = xgb_reg.predict(dm_val)
+        y_probas = xgb_reg.predict(dm_val)
+        y_preds = 1 * (y_probas > 0.5)
 
-        auc = roc_auc_score(y_val, y_preds)
+        print(y_val, y_probas)
+        auc = roc_auc_score(y_val, y_probas)
         acc = np.mean(y_preds == y_val)
 
         auc_list.append(auc)
@@ -199,7 +175,7 @@ def XGB_Eval_Pipeline(params, df, target_name, df_train_kbest, df_val_kbest, tar
 
     # Fit model
     n_rounds = 1400
-    xgb_reg = xgb.train(params={'objective': "binary:hinge", 'booster': 'gbtree', 'disable_default_eval_metric': 1,
+    xgb_reg = xgb.train(params={'objective': "binary:logistic", 'booster': 'gbtree',
                                 'tree_method': 'hist', 'grow_policy': 'lossguide',
 
                                 'silent': True, 'n_jobs': os.cpu_count(), 'random_state': 123,
@@ -216,8 +192,8 @@ def XGB_Eval_Pipeline(params, df, target_name, df_train_kbest, df_val_kbest, tar
                         dtrain=dm_train, num_boost_round=n_rounds,
                         callbacks=[xgb.callback.early_stop(stopping_rounds=200, maximize=False, verbose=True)],
 
-                        # Custom scoring
-                        feval=xgb_ng_loss, evals=[(dm_train, 'train'), (dm_test, 'test')],
+                        # Training scoring
+                        evals=[(dm_train, 'train'), (dm_test, 'test')],
                         verbose_eval=0, evals_result=xgb_evals)
 
     # Plots
@@ -230,9 +206,10 @@ def XGB_Eval_Pipeline(params, df, target_name, df_train_kbest, df_val_kbest, tar
         plt.show()
 
     # Score on Validation Set
-    y_preds = xgb_reg.predict(dm_val)
+    y_probas = xgb_reg.predict(dm_val)
+    y_preds = 1 * (y_probas > 0.5)
 
-    auc = roc_auc_score(y_val, y_preds)
+    auc = roc_auc_score(y_val, y_probas)
     acc = np.mean(y_preds == y_val)
 
 
