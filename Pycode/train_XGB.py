@@ -1,7 +1,10 @@
+import os
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.preprocessing import RobustScaler
+from sklearn.metrics import roc_auc_score
+import xgboost as xgb
 
 
 def XGB_Data_Preparation(kbest_df, target, n_val=60):
@@ -102,8 +105,8 @@ def XGB_Tuning_Pipeline(df_train_kbest, df_val_kbest, target_train, target_val, 
 
     # Tuning results
     params_list = []
-    mse_list = []
-    dir_score_list = []
+    auc_list = []
+    acc_list = []
 
     # Tune over the subsample parameters
     subsample_space = np.linspace(0.01, 0.8, 20)
@@ -125,7 +128,7 @@ def XGB_Tuning_Pipeline(df_train_kbest, df_val_kbest, target_train, target_val, 
 
         # Fit model
         n_rounds = 1400
-        xgb_reg = xgb.train(params={'objective': "reg:linear", 'booster': 'gbtree', 'disable_default_eval_metric': 1,
+        xgb_reg = xgb.train(params={'objective': "binary:hinge", 'booster': 'gbtree', 'disable_default_eval_metric': 1,
                                     'tree_method': 'hist', 'grow_policy': 'lossguide',
 
                                     'silent': True, 'n_jobs': os.cpu_count(), 'random_state': 123,
@@ -148,19 +151,19 @@ def XGB_Tuning_Pipeline(df_train_kbest, df_val_kbest, target_train, target_val, 
 
         # Score on Validation Set
         y_preds = xgb_reg.predict(dm_val)
-        mse = mean_squared_error(y_val, y_preds)
-        dir_score = np.mean((y_preds * y_val) > 0)
 
-        dir_score_list.append(dir_score)
-        mse_list.append(mse)
+        auc = roc_auc_score(y_val, y_preds)
+        acc = np.mean(y_preds == y_val)
 
+        auc_list.append(auc)
+        acc_list.append(acc)
         counter += 1
 
     # Put results together
     tuning_df = pd.DataFrame({'Params': params_list,
-                              'Dir_Score': dir_score_list,
-                              "MSE": mse_list}).sort_values(['Dir_Score', 'MSE'],
-                                                            ascending=[False, True])
+                              'Accuracy': acc_list,
+                              "AUC": auc_list}).sort_values(['AUC', 'Accuracy'],
+                                                            ascending=[False, False])
 
     return tuning_df
 
@@ -196,7 +199,7 @@ def XGB_Eval_Pipeline(params, df, target_name, df_train_kbest, df_val_kbest, tar
 
     # Fit model
     n_rounds = 1400
-    xgb_reg = xgb.train(params={'objective': "reg:linear", 'booster': 'gbtree', 'disable_default_eval_metric': 1,
+    xgb_reg = xgb.train(params={'objective': "binary:hinge", 'booster': 'gbtree', 'disable_default_eval_metric': 1,
                                 'tree_method': 'hist', 'grow_policy': 'lossguide',
 
                                 'silent': True, 'n_jobs': os.cpu_count(), 'random_state': 123,
@@ -229,86 +232,23 @@ def XGB_Eval_Pipeline(params, df, target_name, df_train_kbest, df_val_kbest, tar
     # Score on Validation Set
     y_preds = xgb_reg.predict(dm_val)
 
-    dir_score = np.mean((y_preds * y_val) > 0)
-    mse = mean_squared_error(y_val, y_preds)
+    auc = roc_auc_score(y_val, y_preds)
+    acc = np.mean(y_preds == y_val)
 
-    print('\n=> XGB Score on Validation set ({} obs): {}\t{}'.format(len(y_val),
-                                                                     round(mse, 4),
-                                                                     str(100 * dir_score) + '%'))
 
-    # Get the average difference between preditced vs real value for correct direction
-    results_diff = ((y_preds * y_val) > 0) * np.abs(y_preds - y_val) * 100
-    av_diff = np.mean(results_diff)
-    min_diff = np.min(results_diff)
-    max_diff = np.max(results_diff)
-    print('- Difference for Predicted Signal with correct sign: \n\t- average: {} \n\t- min: {} \n\t- max; {}'.format(
-        av_diff,
-        min_diff,
-        max_diff))
+    print('\n=> XGB Score on Validation set ({} obs): AUC: {}\tAccuracy: {}'.format(len(y_val),
+                                                                                    round(auc, 2),
+                                                                                    str(100 * acc) + '%'))
 
-    print('{}/{}'.format(np.sum((y_preds * y_val) > 0), len(y_val)))
 
     # Format test values as dataframe
-    df_test = pd.DataFrame({'Real Signal': y_test * 100,
-                            'Predicted Signal': xgb_reg.predict(dm_test) * 100},
+    df_test = pd.DataFrame({'Real Label': y_test * 100,
+                            'Predicted DLabel': xgb_reg.predict(dm_test) * 100},
                            index=target_train.iloc[-n_test:].index).round(0)
 
     # Format the forecasts for Trading Backtesting
-    df_backtest = pd.DataFrame({'Real Signal': y_val * 100,
-                                'Predicted Signal': y_preds * 100}, index=target_val.index).round(0)
+    df_backtest = pd.DataFrame({'Real Label': y_val * 100,
+                                'Predicted Label': y_preds * 100}, index=target_val.index).round(0)
 
-    # Add copper price
-    df_backtest['Copper Close Price'] = df['LME Copper_Close']
-    df_backtest['Copper Open Price'] = df['LME Copper_Open']
-
-    # Save as csv
-    df_backtest.index.name = 'DateTime'
-
-    # Replace values above the limit by the limits
-    df_backtest['Real Signal'] = df_backtest['Real Signal'].apply(lambda x: 100 if x > 100 else x)
-    df_backtest['Real Signal'] = df_backtest['Real Signal'].apply(lambda x: -100 if x < -100 else x)
-
-    df_backtest['Predicted Signal'] = df_backtest['Predicted Signal'].apply(lambda x: 100 if x > 100 else x)
-    df_backtest['Predicted Signal'] = df_backtest['Predicted Signal'].apply(lambda x: -100 if x < -100 else x)
-
-    # To CSV
-    df_backtest.to_csv('Backtest_XGBTradingSignal_{}.csv'.format(target_name))
-
-    # Plots
-    fig, ax = plt.subplots(nrows=2)
-
-    _ = df_test.loc[:, ['Real Signal', 'Predicted Signal']].iloc[-40:, :].plot(kind='bar', ax=ax[0],
-                                                                               title='Real vs Predicted {} Trading Signal on Test set'.format(
-                                                                                   target_name))
-
-    _ = ax[0].set_xticklabels([str(idx).split(' ')[0] for idx in
-                               df_test.loc[:, ['Real Signal', 'Predicted Signal']].iloc[-40:, :].index.tolist()])
-
-    _ = df_backtest.loc[:, ['Real Signal', 'Predicted Signal']].plot(kind='bar', ax=ax[1],
-                                                                     title='Real vs Predicted {} Trading Signal on Validation set'.format(
-                                                                         target_name))
-
-    _ = ax[1].set_xticklabels(
-        [str(idx).split(' ')[0] for idx in df_backtest.loc[:, ['Real Signal', 'Predicted Signal']].index.tolist()])
-
-    _ = plt.tight_layout()
-    plt.show()
-
-    # Features Importance
-    ftype_list = ['weight', 'total_gain']
-
-    plt.rcParams['figure.figsize'] = (16, 6 * len(ftype_list))
-    fig, ax = plt.subplots(nrows=len(ftype_list))
-
-    for i, ftype in enumerate(ftype_list):
-        # Sorted importance
-        drivers_weight = pd.Series(xgb_reg.get_score(fmap='', importance_type=ftype)).sort_values(ascending=False)
-
-        # Subplot
-        _ = drivers_weight.iloc[:20].plot(kind='bar', color='b', ax=ax[i],
-                                          title='Features Importance - {} criteria'.format(ftype))
-
-    _ = plt.tight_layout()
-    plt.show()
 
     return df_backtest
