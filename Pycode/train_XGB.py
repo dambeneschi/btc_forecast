@@ -1,14 +1,18 @@
 import os
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 from sklearn.preprocessing import RobustScaler
 from sklearn.metrics import roc_auc_score
 import xgboost as xgb
 
 
 def XGB_Data_Preparation(kbest_df, target, n_val=60):
-    ''''''
+    '''
+    Pre processing pipeling for XGBpost that:
+    - aligns the datetime indexes for the fetaures & target sets
+    - Split between Train & Validation sets
+    - Scales the data using RobustScaler
+    '''
 
     # Put together the features & Trading signal
     kbest_df['Target'] = target
@@ -50,7 +54,11 @@ def XGB_Data_Preparation(kbest_df, target, n_val=60):
 
 
 def XGB_Tuning_Pipeline(df_train_kbest, df_val_kbest, target_train, target_val, n_test=200, n_tune=200):
-    ''''''
+    '''
+    Tune the XGBoost Classifier for Binary Logistic regression problem
+    by selecting n_tune random combination of the subsample parameters.
+    It returns the best parmeters based on the  AUC & Accuracy scores on the validation set
+    '''
 
     xgb_evals = {}
 
@@ -143,13 +151,17 @@ def XGB_Tuning_Pipeline(df_train_kbest, df_val_kbest, target_train, target_val, 
     return tuning_df
 
 
-def XGB_Eval_Pipeline(params, df, target_name, df_train_kbest, df_val_kbest, target_train, target_val, n_test=200,
-                      _plot=False):
-    ''''''
+def XGB_Eval_Pipeline(params, df_train_kbest, df_val_kbest, target_train, target_val, n_test=200):
+    '''
+    Evaluates the XGBoost classifier for binary logistic regressiomn problem
+    for the given subsample parameters obtained from tuning
+    and computes the Accuracy & AUC scores on test & validations sets, returned
+    The predictions on the test & validation sets are returned as dataframe
+    '''
 
     xgb_evals = {}
 
-    # Slice trianing data for CV
+    # Slice training data for CV
     X_train = df_train_kbest.iloc[:-n_test, :].values
     X_test = df_train_kbest.iloc[-n_test:, :].values
 
@@ -193,16 +205,8 @@ def XGB_Eval_Pipeline(params, df, target_name, df_train_kbest, df_val_kbest, tar
 
                         # Training scoring
                         evals=[(dm_train, 'train'), (dm_test, 'test')],
-                        verbose_eval=0, evals_result=xgb_evals)
+                        verbose_eval=20, evals_result=xgb_evals)
 
-    # Plots
-    if _plot:
-        fig, ax = plt.subplots(nrows=2)
-
-        # Train & Test
-        _ = ax[0].plot(range(len(xgb_evals['train']['ng_loss'])), xgb_evals['train']['ng_loss'])
-        _ = ax[1].plot(range(len(xgb_evals['train']['ng_loss'])), xgb_evals['test']['ng_loss'])
-        plt.show()
 
     # Score on Validation Set
     y_probas = xgb_reg.predict(dm_val)
@@ -227,4 +231,4 @@ def XGB_Eval_Pipeline(params, df, target_name, df_train_kbest, df_val_kbest, tar
                                 'Predicted Label': y_preds * 100}, index=target_val.index).round(0)
 
 
-    return df_backtest
+    return df_test, df_backtest
