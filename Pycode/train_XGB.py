@@ -47,7 +47,8 @@ def XGB_Data_Preparation(kbest_df, target, n_val=60):
                                  columns=df_val.columns,
                                  index=df_val.index)
 
-    return df_train_scaled, df_val_scaled, target_train, target_val
+
+    return X_scaler, df_train_scaled, df_val_scaled, target_train, target_val
 
 
 
@@ -224,13 +225,17 @@ def XGB_Eval_Pipeline(params, df_train_kbest, df_val_kbest, target_train, target
 
     # Format test values as dataframe
     df_test = pd.DataFrame({'Real Label': y_test,
-                            'Predicted DLabel': xgb_reg.predict(dm_test) * 100},
+                            'Predicted Label': xgb_reg.predict(dm_test) * 100},
                            index=target_train.iloc[-n_test:].index).round(0)
 
     # Format the forecasts for Trading Backtesting
     df_backtest = pd.DataFrame({'Real Label': y_val,
                                 'Predicted Label': y_preds}, index=target_val.index).round(0)
 
+
+    # Add the Labels Keep(0)/Change(1)
+    df_test['Predicted Trend'] = df_test['Predicted Label'].map({1:'Change',  0: 'Keep'})
+    df_backtest['Predicted Trend'] = df_backtest['Predicted Label'].map({1: 'Change', 0: 'Keep'})
 
 
     # Features Importance
@@ -251,4 +256,4 @@ def XGB_Eval_Pipeline(params, df_train_kbest, df_val_kbest, target_train, target
     plt.show()
 
 
-    return df_test, df_backtest
+    return xgb_reg, df_test, df_backtest

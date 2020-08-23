@@ -108,7 +108,7 @@ def features_engineering(df, _lags=False):
     df_ta.drop(columns=df_ta.columns[:6], inplace=True)
     df_ta.columns = ['BTC Price.' + col for col in df_ta.columns]
 
-    # Drop totally empty columns & tthose with high number of missing values
+    # Drop totally empty columns & those with high number of missing values
     df_ta.dropna(how='all', axis='columns', inplace=True)
 
     print(df_ta.isnull().sum().sort_values(ascending=False).iloc[:20])
@@ -124,6 +124,7 @@ def features_engineering(df, _lags=False):
 
     #TODO: Add difference from min/max,
 
+    #--------------------
     # Put all together
     df_all_feats = pd.concat([feats_df, df_ta, df_ta_diff], axis=1)
     print(df_all_feats.isnull().sum().sum())
@@ -151,7 +152,7 @@ def features_engineering(df, _lags=False):
     print('{} NaNs in the features'.format(df_all_feats.isnull().sum().sum()))
     print('{} inf values in the features'.format(df_all_feats.isin([np.inf, -np.inf]).sum().sum()))
 
-    
+
 
     return df_all_feats
 
@@ -179,13 +180,17 @@ def target_engineering(df):
     price_trend = (price_mov_class == price_mov_class.shift(1)).dropna()
     price_trend = price_trend.map({True: 0, False: 1})
 
-    _ = price_trend.value_counts().plot(kind='bar', title='Keep(0)/Change(1) Trend direction count', ax=ax[1])
+    # Shift the target to have the forecasting objective trend +1h
+    price_trend = price_trend.shift(-1)
 
+
+    # Plot
+    _ = price_trend.value_counts().plot(kind='bar', title='Keep(0)/Change(1) Trend direction count', ax=ax[1])
     plt.show()
 
     target = price_trend
     class_weights = price_trend.value_counts().to_dict()
-    print(target)
+    print(target.tail(20))
     print(class_weights)
 
     return target, class_weights
