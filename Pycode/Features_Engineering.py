@@ -104,7 +104,7 @@ def features_engineering(df, _lags=False):
     # Compute the Indicators
     df_ta.ta.strategy(name='all')
 
-    # Drop the ooriginal OHCL columns
+    # Drop the original OHCL columns
     df_ta.drop(columns=df_ta.columns[:6], inplace=True)
     df_ta.columns = ['BTC Price.' + col for col in df_ta.columns]
 

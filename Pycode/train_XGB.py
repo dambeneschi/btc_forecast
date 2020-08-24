@@ -9,7 +9,7 @@ import xgboost as xgb
 
 def XGB_Data_Preparation(kbest_df, target, n_val=60):
     '''
-    Pre processing pipeling for XGBpost that:
+    Pre processing pipeling for XGBoost that:
     - aligns the datetime indexes for the fetaures & target sets
     - Split between Train & Validation sets
     - Scales the data using RobustScaler
@@ -111,13 +111,14 @@ def XGB_Tuning_Pipeline(df_train_kbest, df_val_kbest, target_train, target_val, 
         print('* {}/{}: {}'.format(counter, n_tune, params_draw))
 
         # Fit model
-        n_rounds = 1400
+        n_rounds = 2000
         xgb_reg = xgb.train(params={'objective': "binary:logistic", 'booster': 'gbtree',
                                     'tree_method': 'hist', 'grow_policy': 'lossguide',
+                                    'eval_metric': 'auc',
 
                                     'silent': True, 'n_jobs': os.cpu_count(), 'random_state': 123,
 
-                                    "learning_rate": 0.01, "gamma": 0, "max_depth": 4,
+                                    "learning_rate": 0.005, "gamma": 0, "max_depth": 5,
                                     "reg_alpha": 0.01, "reg_lambda": 0,
 
                                     "subsample": subsample,
@@ -127,7 +128,7 @@ def XGB_Tuning_Pipeline(df_train_kbest, df_val_kbest, target_train, target_val, 
                                     },
 
                             dtrain=dm_train, num_boost_round=n_rounds,
-                            callbacks=[xgb.callback.early_stop(stopping_rounds=200, maximize=False, verbose=True)],
+                            callbacks=[xgb.callback.early_stop(stopping_rounds=400, maximize=False, verbose=True)],
 
                             # Training scoring
                             evals=[(dm_train, 'train'), (dm_test, 'test')],
@@ -187,13 +188,14 @@ def XGB_Eval_Pipeline(params, df_train_kbest, df_val_kbest, target_train, target
                          nthread=os.cpu_count())
 
     # Fit model
-    n_rounds = 1400
+    n_rounds = 2000
     xgb_reg = xgb.train(params={'objective': "binary:logistic", 'booster': 'gbtree',
                                 'tree_method': 'hist', 'grow_policy': 'lossguide',
+                                'eval_metric': 'auc',
 
                                 'silent': True, 'n_jobs': os.cpu_count(), 'random_state': 123,
 
-                                "learning_rate": 0.01, "gamma": 0, "max_depth": 4,
+                                "learning_rate": 0.005, "gamma": 0, "max_depth": 5,
                                 "reg_alpha": 0.01, "reg_lambda": 0,
 
                                 "subsample": params[0],
@@ -203,7 +205,7 @@ def XGB_Eval_Pipeline(params, df_train_kbest, df_val_kbest, target_train, target
                                 },
 
                         dtrain=dm_train, num_boost_round=n_rounds,
-                        callbacks=[xgb.callback.early_stop(stopping_rounds=200, maximize=False, verbose=True)],
+                        callbacks=[xgb.callback.early_stop(stopping_rounds=400, maximize=False, verbose=True)],
 
                         # Training scoring
                         evals=[(dm_train, 'train'), (dm_test, 'test')],
@@ -225,7 +227,7 @@ def XGB_Eval_Pipeline(params, df_train_kbest, df_val_kbest, target_train, target
 
     # Format test values as dataframe
     df_test = pd.DataFrame({'Real Label': y_test,
-                            'Predicted Label': xgb_reg.predict(dm_test) * 100},
+                            'Predicted Label': xgb_reg.predict(dm_test)},
                            index=target_train.iloc[-n_test:].index).round(0)
 
     # Format the forecasts for Trading Backtesting
